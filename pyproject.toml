@@ -3,7 +3,7 @@ requires = ["setuptools>=69", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "va_datamask"
+name = "wd_datamask"
 version = "1.0.0"
 description = "Internal reversible data masking for PySpark and Databricks"
 requires-python = ">=3.11"
@@ -19,11 +19,11 @@ dev = ["pytest>=8", "pytest-cov>=5", "build>=1"]
 where = ["src"]
 
 [tool.setuptools.package-data]
-va_datamask = ["data/*.json"]
+wd_datamask = ["data/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 markers = ["spark: requires a local Spark runtime", "delta: requires Delta jars"]
 
 [tool.coverage.run]
-source = ["va_datamask"]
+source = ["wd_datamask"]

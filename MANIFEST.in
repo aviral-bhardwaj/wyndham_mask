@@ -5,4 +5,4 @@ recursive-include notebooks *.py
 recursive-include tests *.py
 recursive-include scripts *.py
 recursive-include sample_lookup_files *.md *.json
-recursive-include src/va_datamask/data *.json
+recursive-include src/wd_datamask/data *.json

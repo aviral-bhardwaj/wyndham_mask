@@ -1,11 +1,11 @@
 import copy
 from collections import Counter
 import pytest
-from va_datamask import Config, MaskingEngine, UnmaskingEngine, PermissionManager, LocalIdentity
-from va_datamask.exceptions import ConfigurationError, MissingMappingError, IntegrityError
-from va_datamask.spark.pandas_udfs import make_lookup_pandas_udf
-from va_datamask.spark.udf_registry import register_lookup_udf
-from va_datamask.spark.subsetting import subset_related
+from wd_datamask import Config, MaskingEngine, UnmaskingEngine, PermissionManager, LocalIdentity
+from wd_datamask.exceptions import ConfigurationError, MissingMappingError, IntegrityError
+from wd_datamask.spark.pandas_udfs import make_lookup_pandas_udf
+from wd_datamask.spark.udf_registry import register_lookup_udf
+from wd_datamask.spark.subsetting import subset_related
 
 pytestmark = pytest.mark.spark
 
@@ -65,7 +65,7 @@ def test_missing_nulls_and_selection(spark, setup):
         unmask.unmask_dataframe(unknown, table="customer", reason="Strict")
     kept = unmask.unmask_dataframe(unknown, table="customer", reason="Inspect", on_missing="keep_masked")
     assert Counter(tuple(r) for r in kept.collect()) == Counter(tuple(r) for r in unknown.collect())
-    assert kept.schema["email"].metadata["va_datamask"]["state"] == "partial"
+    assert kept.schema["email"].metadata["wd_datamask"]["state"] == "partial"
     assert deps["audit"].events()[-1]["unresolved"] == {"email": 1}
     for columns in [[], ["email", "email"], ["unknown"]]:
         with pytest.raises(ConfigurationError):
@@ -116,7 +116,7 @@ def test_pure_udfs(spark):
 
 
 def test_decryption_udf_contract(spark, setup):
-    from va_datamask.spark.udf_registry import decrypt_udf
+    from wd_datamask.spark.udf_registry import decrypt_udf
     from dataclasses import asdict
     from pyspark.sql import Row
     mask, _, deps, _ = setup

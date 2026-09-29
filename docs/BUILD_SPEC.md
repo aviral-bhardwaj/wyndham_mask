@@ -1,6 +1,6 @@
 # Build an Internal Data Masking and Unmasking Python Package for Databricks
 
-Build an internal Python package named `va_datamask` for Wyndham's data masking initiative. Deliver source code and a private wheel; do not publish it to PyPI.
+Build an internal Python package named `wd_datamask` for Wyndham's data masking initiative. Deliver source code and a private wheel; do not publish it to PyPI.
 
 The package must mask sensitive production data for development, QA, UAT, and testing, using realistic substitute values and consistent mappings. It must also let authorized users apply unmasking to individual values, selected DataFrame columns, and persisted masked Delta datasets, restoring the exact originals.
 
@@ -12,11 +12,11 @@ This is reversible pseudonymization. Its mapping vault and decryption capability
 - PySpark, Spark SQL, Delta Lake, and Unity Catalog.
 - Prefer Spark expressions and distributed joins. Provide Pandas UDFs and Spark UDFs for transformations where appropriate; do not require UDFs where native operations work better.
 - Package with `pyproject.toml`, a `src/` layout, and `python -m build`. Include `setup.py` only if required by the chosen build tooling.
-- Produce `dist/va_datamask-1.0.0-py3-none-any.whl` if the implementation is pure Python. Document dependencies and do not bundle a conflicting Spark runtime.
+- Produce `dist/wd_datamask-1.0.0-py3-none-any.whl` if the implementation is pure Python. Document dependencies and do not bundle a conflicting Spark runtime.
 - Include private installation instructions using a Unity Catalog volume or workspace files, for example:
 
 ```python
-%pip install /Volumes/<catalog>/<schema>/<volume>/wheels/va_datamask-1.0.0-py3-none-any.whl
+%pip install /Volumes/<catalog>/<schema>/<volume>/wheels/wd_datamask-1.0.0-py3-none-any.whl
 ```
 
 ## 2. Package structure
@@ -24,10 +24,10 @@ This is reversible pseudonymization. Its mapping vault and decryption capability
 Include `__init__.py` files and these modules:
 
 ```text
-va_datamask/
+wd_datamask/
   pyproject.toml
   README.md
-  src/va_datamask/
+  src/wd_datamask/
     __init__.py
     masking_engine.py
     unmasking_engine.py

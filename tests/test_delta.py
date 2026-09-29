@@ -2,11 +2,11 @@ import copy
 import os
 import uuid
 import pytest
-from va_datamask import Config, DeltaRepository, DeltaAuditManager, MaskingEngine, UnmaskingEngine
-from va_datamask.exceptions import AllocationBusyError, ConfigurationError, IntegrityError, RecoveryRequiredError, AuditError
-from va_datamask.spark.dataframe_masker import _read_manifest, _publish
+from wd_datamask import Config, DeltaRepository, DeltaAuditManager, MaskingEngine, UnmaskingEngine
+from wd_datamask.exceptions import AllocationBusyError, ConfigurationError, IntegrityError, RecoveryRequiredError, AuditError
+from wd_datamask.spark.dataframe_masker import _read_manifest, _publish
 
-pytestmark = [pytest.mark.delta, pytest.mark.skipif(not os.environ.get("VA_DELTA_JARS"), reason="Set VA_DELTA_JARS to test actual Delta storage")]
+pytestmark = [pytest.mark.delta, pytest.mark.skipif(not os.environ.get("WD_DELTA_JARS"), reason="Set WD_DELTA_JARS to test actual Delta storage")]
 
 
 @pytest.fixture
@@ -96,7 +96,7 @@ def test_audit_failure_does_not_publish_stage(spark, delta_setup):
     with pytest.raises(AuditError):
         engine.mask_table(source_table=f"{name}.source", target_table=f"{name}.masked", table="customer")
     assert not spark.catalog.tableExists(f"{name}.masked")
-    assert not [t for t in spark.catalog.listTables(name) if t.name.startswith("_va_stage_")]
+    assert not [t for t in spark.catalog.listTables(name) if t.name.startswith("_wd_stage_")]
 
 
 def test_post_commit_audit_failure_requires_reconciliation(spark, delta_setup):
@@ -140,8 +140,8 @@ def test_simultaneous_delta_allocators(spark, delta_setup):
 
 
 def test_delta_rotation_and_corruption_detection(spark, delta_setup):
-    from va_datamask import KeyRing
-    from va_datamask.exceptions import AmbiguousMappingError
+    from wd_datamask import KeyRing
+    from wd_datamask.exceptions import AmbiguousMappingError
     name, deps, _ = delta_setup
     mask = MaskingEngine(**deps)
     masked = mask.mask_value("a@example.org", domain="email")

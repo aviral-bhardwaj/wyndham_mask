@@ -1,7 +1,7 @@
 import os
 from pathlib import Path
 import pytest
-from va_datamask import (Config, KeyRing, MaskingEngine, UnmaskingEngine, MappingStore,
+from wd_datamask import (Config, KeyRing, MaskingEngine, UnmaskingEngine, MappingStore,
                         AuditManager, PermissionManager, LocalIdentity)
 
 
@@ -33,10 +33,10 @@ def setup(tmp_path, raw_config):
 @pytest.fixture(scope="session")
 def spark(tmp_path_factory):
     from pyspark.sql import SparkSession
-    builder = SparkSession.builder.master("local[2]").appName("va-datamask-tests").config(
+    builder = SparkSession.builder.master("local[2]").appName("wd-datamask-tests").config(
         "spark.ui.enabled", "false").config("spark.sql.shuffle.partitions", "2").config(
         "spark.sql.warehouse.dir", str(tmp_path_factory.mktemp("warehouse")))
-    jars = os.environ.get("VA_DELTA_JARS")
+    jars = os.environ.get("WD_DELTA_JARS")
     if jars:
         builder = builder.config("spark.jars", jars).config(
             "spark.sql.extensions", "io.delta.sql.DeltaSparkSessionExtension").config(
