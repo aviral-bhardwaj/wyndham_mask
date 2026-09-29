@@ -2,7 +2,7 @@
 from pathlib import Path
 import os
 import tempfile
-from va_datamask import (load_config, KeyRing, MappingStore, AuditManager, LocalIdentity,
+from wd_datamask import (load_config, KeyRing, MappingStore, AuditManager, LocalIdentity,
                         PermissionManager, MaskingEngine, UnmaskingEngine)
 
 

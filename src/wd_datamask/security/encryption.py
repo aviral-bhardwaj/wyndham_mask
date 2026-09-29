@@ -25,8 +25,8 @@ class KeyRing:
     def from_env(cls):
         try:
             return cls(
-                {"enc-v1": base64.b64decode(os.environ["VA_DATAMASK_ENCRYPTION_KEY"], validate=True)},
-                {"fp-v1": base64.b64decode(os.environ["VA_DATAMASK_FINGERPRINT_KEY"], validate=True)},
+                {"enc-v1": base64.b64decode(os.environ["WD_DATAMASK_ENCRYPTION_KEY"], validate=True)},
+                {"fp-v1": base64.b64decode(os.environ["WD_DATAMASK_FINGERPRINT_KEY"], validate=True)},
                 "enc-v1", "fp-v1",
             )
         except (KeyError, ValueError):

@@ -1,6 +1,6 @@
 # Lookup format
 
-The bundled example is `src/va_datamask/data/lookups.json`. Copy it into your approved
+The bundled example is `src/wd_datamask/data/lookups.json`. Copy it into your approved
 data location and expand its `first_names`, `last_names`, and `streets` arrays for the
 actual number of distinct values. Use:
 

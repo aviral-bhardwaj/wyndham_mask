@@ -10,7 +10,7 @@ from pathlib import Path
 import tempfile
 import time
 import json
-from va_datamask import (Config, KeyRing, MappingStore, AuditManager, PermissionManager,
+from wd_datamask import (Config, KeyRing, MappingStore, AuditManager, PermissionManager,
                         LocalIdentity, MaskingEngine, UnmaskingEngine)
 
 
@@ -22,7 +22,7 @@ def main():
     args = parser.parse_args()
     if args.rows < 1 or not 1 <= args.distinct <= 10000:
         parser.error("Use positive rows and 1..10000 distinct values for the local backend")
-    spark = SparkSession.builder.master("local[2]").appName("va-datamask-benchmark").getOrCreate()
+    spark = SparkSession.builder.master("local[2]").appName("wd-datamask-benchmark").getOrCreate()
     config = Config({"namespace": "benchmark", "mapping_version": "v1", "tables": {
         "customer": {"columns": {"email": {"mask_type": "email", "domain": "email"}}}}})
     identity = LocalIdentity()

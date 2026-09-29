@@ -4,7 +4,7 @@
 
 The complete suite passed: **70 tests**, including the actual local Spark and Delta
 integration tests, with **96% statement coverage** (898 of 932 statements). The run
-completed in approximately 172 seconds on macOS with Python 3.11.16, Java 17,
+completed in approximately 75 seconds after the package rename on macOS with Python 3.11.16, Java 17,
 PySpark 3.5.3, and Delta Lake 3.2.1. Twelve warnings were upstream PySpark deprecations
 for `distutils` version checks in its pandas/Arrow integration.
 
@@ -14,6 +14,8 @@ the repository source. All 38 Python files parsed successfully. The Delta suite
 verified simultaneous mutex contention, persisted manifest recovery with newer
 current YAML, encryption rotation, corruption detection, and both pre-publication
 and post-commit audit failures. No live Databricks workspace was used.
+The rebuilt distribution and its import namespace were verified as `wd_datamask`;
+the wheel contains no superseded package modules.
 
 ## Test commands
 
@@ -24,11 +26,11 @@ python -m pytest -m 'not spark and not delta'
 python -m pytest -m spark
 ```
 
-For actual local Delta integration, set `VA_DELTA_JARS` to a comma-separated list of
+For actual local Delta integration, set `WD_DELTA_JARS` to a comma-separated list of
 Delta Spark 3.2.1, Delta Storage 3.2.1, and ANTLR 4.9.3 jar paths. Then run:
 
 ```bash
-python -m pytest --cov=va_datamask --cov-report=term-missing
+python -m pytest --cov=wd_datamask --cov-report=term-missing
 ```
 
 The Spark fixture enables Delta extensions only when those jars are supplied.

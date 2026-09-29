@@ -6,14 +6,14 @@
 # MAGIC This notebook never prints original or restored records.
 
 # COMMAND ----------
-# MAGIC %pip install /Volumes/<catalog>/<schema>/<volume>/wheels/va_datamask-1.0.0-py3-none-any.whl
+# MAGIC %pip install /Volumes/<catalog>/<schema>/<volume>/wheels/wd_datamask-1.0.0-py3-none-any.whl
 
 # COMMAND ----------
 dbutils.library.restartPython()
 
 # COMMAND ----------
 import base64
-from va_datamask import (Config, KeyRing, DeltaRepository, DeltaAuditManager,
+from wd_datamask import (Config, KeyRing, DeltaRepository, DeltaAuditManager,
                         DatabricksIdentity, PermissionManager, MaskingEngine, UnmaskingEngine)
 
 # Provision these catalogs/schemas in the operator bootstrap step first.
@@ -26,7 +26,7 @@ AUDIT = f"{SECURITY_SCHEMA}.audit_events"
 SOURCE = f"{DATA_SCHEMA}.source_customer"
 MASKED = f"{DATA_SCHEMA}.masked_customer"
 RESTORED = f"{DATA_SCHEMA}.restored_customer"
-SECRET_SCOPE = "va-datamask"
+SECRET_SCOPE = "wd-datamask"
 # Replace with the actual, operator-approved execution principal. Never infer a grant
 # from a request's claimed email, group, or role.
 APPROVED_PRINCIPAL = "replace-with-approved-execution-principal"

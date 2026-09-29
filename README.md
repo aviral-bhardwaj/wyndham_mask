@@ -1,4 +1,4 @@
-# va_datamask
+# wd_datamask
 
 Private Python package for human-readable, reversible data masking. Mask and restore
 individual strings, selected Spark DataFrame columns, or persisted Delta tables.
@@ -20,16 +20,22 @@ The demo uses synthetic records, temporary keys, and an encrypted SQLite mapping
 vault. It verifies an exact round trip without printing sensitive values. SQLite is
 the reference backend for local development; use `DeltaRepository` on Databricks.
 
-The build produces `dist/va_datamask-1.0.0-py3-none-any.whl`. Upload the wheel to a
+The build produces `dist/wd_datamask-1.0.0-py3-none-any.whl`. Upload the wheel to a
 Unity Catalog volume and install it on trusted Databricks compute:
 
 ```python
-%pip install /Volumes/<catalog>/<schema>/<volume>/wheels/va_datamask-1.0.0-py3-none-any.whl
+%pip install /Volumes/<catalog>/<schema>/<volume>/wheels/wd_datamask-1.0.0-py3-none-any.whl
 ```
 
 Restart Python after installation when required. Do not install the `spark` or
 `delta` extras on Databricks: use the Spark and Delta versions bundled with its
 runtime. Runtime qualification is required before deployment.
+
+Import the installed package in your notebook before initializing the engines:
+
+```python
+from wd_datamask import MaskingEngine, UnmaskingEngine
+```
 
 ## Apply masking and unmasking
 

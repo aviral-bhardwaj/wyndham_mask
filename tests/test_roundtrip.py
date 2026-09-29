@@ -3,10 +3,10 @@ from dataclasses import replace
 import json
 import os
 import pytest
-from va_datamask import KeyRing, MaskingEngine, UnmaskingEngine, MappingStore, PermissionManager, LocalIdentity
-from va_datamask.exceptions import (MappingCapacityError, MissingMappingError, IntegrityError,
+from wd_datamask import KeyRing, MaskingEngine, UnmaskingEngine, MappingStore, PermissionManager, LocalIdentity
+from wd_datamask.exceptions import (MappingCapacityError, MissingMappingError, IntegrityError,
                                     AuditError, ConfigurationError)
-from va_datamask.models import Scope
+from wd_datamask.models import Scope
 
 
 @pytest.mark.parametrize("domain,original", [
@@ -42,7 +42,7 @@ def test_persistence_and_no_plaintext(setup, tmp_path):
 
 def test_finite_pool_exhaustion_is_atomic(setup):
     mask, _, deps, _ = setup
-    from va_datamask.maskers.base import NameMasker
+    from wd_datamask.maskers.base import NameMasker
     mask.maskers["first_name"] = NameMasker(["Alice", "Bob"])
     scope = deps["config"].scope("first_name")
     with pytest.raises(MappingCapacityError):
@@ -135,10 +135,10 @@ def test_source_type_rejected(setup):
 
 def test_key_environment(monkeypatch):
     import base64
-    for name in ("VA_DATAMASK_ENCRYPTION_KEY", "VA_DATAMASK_FINGERPRINT_KEY"):
+    for name in ("WD_DATAMASK_ENCRYPTION_KEY", "WD_DATAMASK_FINGERPRINT_KEY"):
         monkeypatch.setenv(name, base64.b64encode(os.urandom(32)).decode())
     assert KeyRing.from_env().encryption_key_id == "enc-v1"
-    monkeypatch.setenv("VA_DATAMASK_ENCRYPTION_KEY", "invalid")
+    monkeypatch.setenv("WD_DATAMASK_ENCRYPTION_KEY", "invalid")
     with pytest.raises(ConfigurationError):
         KeyRing.from_env()
 

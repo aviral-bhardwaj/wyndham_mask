@@ -6,7 +6,7 @@ from ..exceptions import ConfigurationError
 
 class LookupManager:
     def __init__(self, path=None):
-        source = Path(path) if path else files("va_datamask").joinpath("data/lookups.json")
+        source = Path(path) if path else files("wd_datamask").joinpath("data/lookups.json")
         self.data = json.loads(source.read_text())
         for name in ("first_names", "last_names", "streets"):
             values = self.data.get(name)

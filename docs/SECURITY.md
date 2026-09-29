@@ -35,7 +35,8 @@ include customer values or secrets in the reason text.
    a separate restricted schema for source/staging/restored data. Ensure no broad
    schema/catalog-level SELECT grants are inherited.
 2. Create two independent 32-byte random keys with your approved secrets/KMS process.
-   Save their base64 values in a Databricks secret scope as `enc-v1` and `fp-v1`.
+   Save their base64 values in the `wd-datamask` Databricks secret scope as `enc-v1`
+   and `fp-v1`, matching the example notebook.
    Do not paste keys into source control, notebooks, YAML, or terminal history.
 3. Install the wheel on trusted compute. Load key bytes through
    `dbutils.secrets.get` into `KeyRing`; the example notebook shows this adapter.
@@ -63,6 +64,10 @@ GRANT CREATE TABLE ON SCHEMA masking_demo.restricted TO `approved-service-princi
 Source SELECT, audit-review SELECT, ownership needed to rename staging tables, and
 secret access must be granted separately. Confirm effective inherited privileges.
 These examples do not revoke pre-existing access or configure your workspace for you.
+
+For local deployments, `KeyRing.from_env()` reads the base64-encoded keys from
+`WD_DATAMASK_ENCRYPTION_KEY` and `WD_DATAMASK_FINGERPRINT_KEY`. Supply them through
+your secret-injection mechanism, rather than committing them in configuration files.
 
 ## Encryption and lookup
 

@@ -9,8 +9,8 @@ from ..storage.delta_repository import identifier
 from ..storage.mapping_store import MAPPING_FIELDS
 from .udf_registry import fingerprint_udf, decrypt_udf
 
-TAG = "va_datamask"
-MANIFEST_PROPERTY = "va_datamask.manifest"
+TAG = "wd_datamask"
+MANIFEST_PROPERTY = "wd_datamask.manifest"
 
 
 def quoted(column):
@@ -163,7 +163,7 @@ def _publish(engine, frame, target, manifest, context):
     if spark.catalog.tableExists(target):
         raise ConfigurationError("Destination already exists; overwriting is disabled")
     stage = target.rsplit(".", 1)
-    stage[-1] = "_va_stage_" + uuid.uuid4().hex
+    stage[-1] = "_wd_stage_" + uuid.uuid4().hex
     stage = ".".join(stage)
     published = False
     try:

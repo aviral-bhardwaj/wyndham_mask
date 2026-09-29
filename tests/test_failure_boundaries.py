@@ -1,11 +1,11 @@
 from dataclasses import replace
 import os
 import pytest
-from va_datamask import KeyRing, MaskingEngine, UnmaskingEngine, Config, PermissionManager, LocalIdentity
-from va_datamask.exceptions import ConfigurationError, IntegrityError, AuditError, RecoveryRequiredError
-from va_datamask.models import Scope
-from va_datamask.spark.pandas_udfs import make_lookup_pandas_udf
-from va_datamask.exceptions import MissingMappingError
+from wd_datamask import KeyRing, MaskingEngine, UnmaskingEngine, Config, PermissionManager, LocalIdentity
+from wd_datamask.exceptions import ConfigurationError, IntegrityError, AuditError, RecoveryRequiredError
+from wd_datamask.models import Scope
+from wd_datamask.spark.pandas_udfs import make_lookup_pandas_udf
+from wd_datamask.exceptions import MissingMappingError
 
 
 def test_typed_name_helpers(setup):
@@ -127,7 +127,7 @@ def test_pandas_lookup_missing_raises():
 
 def test_identity_adapter_contract():
     from types import SimpleNamespace
-    from va_datamask import DatabricksIdentity
+    from wd_datamask import DatabricksIdentity
     class PlatformSession:
         def sql(self, query):
             assert query == "SELECT session_user() AS principal"

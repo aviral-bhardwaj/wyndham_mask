@@ -2,10 +2,10 @@ import copy
 import json
 import re
 import pytest
-from va_datamask import Config, load_config, LookupManager
-from va_datamask.exceptions import ConfigurationError
-from va_datamask.maskers.base import EmailMasker, PhoneMasker, MembershipMasker
-from va_datamask.storage.delta_repository import identifier
+from wd_datamask import Config, load_config, LookupManager
+from wd_datamask.exceptions import ConfigurationError
+from wd_datamask.maskers.base import EmailMasker, PhoneMasker, MembershipMasker
+from wd_datamask.storage.delta_repository import identifier
 
 
 def test_yaml(tmp_path, raw_config):
