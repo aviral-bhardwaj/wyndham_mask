@@ -1,0 +1,38 @@
+namespace: wyndham_shared_test
+mapping_version: v1
+defaults:
+  invalid_values: replace
+  email_domain: example.com
+tables:
+  customer:
+    columns:
+      first_name:
+        mask_type: first_name
+        domain: customer_first_name
+      last_name:
+        mask_type: last_name
+        domain: customer_last_name
+      full_name:
+        mask_type: full_name
+        domain: customer_full_name
+        mode: independent_mapping
+      email:
+        mask_type: email
+        domain: customer_email
+      phone:
+        mask_type: phone
+        domain: customer_phone
+      address:
+        mask_type: address
+        domain: customer_address
+      membership_no:
+        mask_type: membership
+        domain: membership_number
+  booking:
+    columns:
+      guest_email:
+        mask_type: email
+        domain: customer_email
+      membership_no:
+        mask_type: membership
+        domain: membership_number
