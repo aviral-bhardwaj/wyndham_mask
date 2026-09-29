@@ -1,16 +1,32 @@
+"""Distributed masking and unmasking of Spark DataFrames.
+
+Scale design (validated locally at 60M rows, see docs/VALIDATION.md):
+
+* Workers only ever process the *distinct* non-null values of one column at a time.
+  Fingerprinting, candidate generation, validation, encryption and decryption run as
+  pandas (Arrow) UDFs over that distinct set, never over every source row.
+* Allocation of new mappings is a bounded probing loop of Spark joins: each round
+  proposes one candidate per pending value, rejects candidates already taken in the
+  vault or by another value in the same round (window ``row_number``), and appends the
+  survivors. The vault receives exactly one append per column per call.
+* The source DataFrame is joined once per column with a ``value -> replacement``
+  lookup. Lookups below ``engine.broadcast_threshold`` distinct values are broadcast.
+"""
 import copy
 import json
 import uuid
 from ..config.yaml_loader import load_config
-from ..engine import batches
 from ..exceptions import (ConfigurationError, MissingMappingError, AmbiguousMappingError,
-                          IntegrityError, RecoveryRequiredError)
+                          IntegrityError, RecoveryRequiredError, MappingCapacityError)
+from ..security.auditing import utcnow
 from ..storage.delta_repository import identifier
 from ..storage.mapping_store import MAPPING_FIELDS
-from .udf_registry import fingerprint_udf, decrypt_udf
+from .pandas_udfs import (fingerprint_pandas_udf, candidate_pandas_udf, validate_pandas_udf,
+                          encrypt_pandas_udf, decrypt_pandas_udf)
 
 TAG = "wd_datamask"
 MANIFEST_PROPERTY = "wd_datamask.manifest"
+NAME_TYPES = {"first_name", "last_name", "full_name"}
 
 
 def quoted(column):
@@ -31,6 +47,122 @@ def selection(engine, df, table, columns=None):
     return chosen, scopes
 
 
+def _distinct(df, column):
+    from pyspark.sql import functions as F
+    return df.select(F.col(quoted(column)).alias("value")).where(F.col("value").isNotNull()).distinct()
+
+
+def _persist(frame):
+    frame.persist()
+    return frame
+
+
+def _materialize(frame):
+    """Compute ``frame`` now and truncate its lineage.
+
+    Each allocation round builds on the previous one; without truncation the logical
+    plan nests every earlier round and grows exponentially. A reliable checkpoint is
+    used when ``spark.sparkContext.setCheckpointDir`` was called, otherwise a local
+    checkpoint (executor storage; the round is retried if an executor is lost).
+    """
+    if frame.sparkSession.sparkContext.getCheckpointDir() is not None:
+        return frame.checkpoint(eager=True)
+    return frame.localCheckpoint(eager=True)
+
+
+def allocate(engine, distinct, scope, actor):
+    """Allocate mappings for every value of ``distinct`` (column ``value``) missing from the vault.
+
+    Returns the number of new mappings. Nothing is written unless every pending value
+    receives a unique substitute; capacity exhaustion aborts the whole column.
+    """
+    from pyspark.sql import functions as F
+    from pyspark.sql.window import Window
+    spark = distinct.sparkSession
+    keys, masker = engine.keys, engine.maskers[scope.domain]
+    fingerprint = fingerprint_pandas_udf(keys, scope)
+    with engine.store.allocation():
+        engine._key_check(scope)
+        vault = engine.store.dataframe(spark, scope)
+        pending = _materialize(distinct.withColumn("fingerprint", fingerprint("value"))
+                               .join(vault.select("fingerprint"), "fingerprint", "left_anti")
+                               .withColumn("attempt", F.lit(0)))
+        remaining = pending.count()
+        if remaining == 0:
+            pending.unpersist()
+            return 0
+        if pending.where(~validate_pandas_udf(masker)("value")).limit(1).count():
+            pending.unpersist()
+            raise ConfigurationError(f"Invalid source value in domain {scope.domain}; "
+                                     "set invalid_values: replace or correct the source")
+        if pending.groupBy("fingerprint").count().where(F.col("count") > 1).limit(1).count():
+            pending.unpersist()
+            raise IntegrityError("Fingerprint collision detected")
+        propose = candidate_pandas_udf(masker)
+        taken = vault.select("masked_value").withColumnRenamed("masked_value", "candidate")
+        accepted, cached = [], [pending]
+        window = Window.partitionBy("candidate").orderBy("fingerprint")
+        for attempt in range(masker.max_attempts):
+            if remaining == 0:
+                break
+            proposals = _materialize(pending.withColumn("candidate", propose("value", "fingerprint", "attempt")))
+            winners = _materialize(proposals.join(taken, "candidate", "left_anti")
+                                   .where(F.col("candidate") != F.col("value"))
+                                   .withColumn("rank", F.row_number().over(window))
+                                   .where(F.col("rank") == 1).drop("rank", "attempt"))
+            if winners.count():
+                accepted.append(winners)
+                taken = taken.union(winners.select("candidate"))
+            pending = _materialize(proposals.join(winners.select("fingerprint"), "fingerprint", "left_anti")
+                                   .withColumn("attempt", F.col("attempt") + 1).drop("candidate"))
+            remaining = pending.count()
+            cached.extend([proposals, winners, pending])
+        try:
+            if remaining:
+                raise MappingCapacityError("No free substitute within the pool/probe limit; expand the lookup pool")
+            batch = accepted[0]
+            for extra in accepted[1:]:
+                batch = batch.union(extra)
+            encrypt = encrypt_pandas_udf(keys, scope)
+            rows = batch.select(
+                F.lit(scope.key()).alias("scope"), F.col("fingerprint"),
+                F.lit(keys.fingerprint_key_id).alias("fingerprint_key_id"),
+                F.col("candidate").alias("masked_value"),
+                encrypt("value", "candidate", "fingerprint").alias("encrypted_original"),
+                F.lit(keys.encryption_key_id).alias("encryption_key_id"),
+                F.lit(utcnow()).alias("created_at"), F.lit(actor).alias("created_by"),
+                F.lit(str(uuid.uuid4())).alias("batch_id"))
+            engine.store.insert_dataframe(rows)
+            return sum(w.count() for w in accepted)
+        finally:
+            for frame in cached:
+                frame.unpersist()
+
+
+def _lookup(engine, df, column, scope, action):
+    """Build a persisted ``value -> replacement`` frame over the column's distinct values."""
+    from pyspark.sql import functions as F
+    spark = df.sparkSession
+    distinct = _persist(_distinct(df, column))
+    if action == "MASK":
+        allocate(engine, distinct, scope, engine.permissions.identity().executor)
+        vault = engine.store.dataframe(spark, scope).select("fingerprint", "masked_value")
+        lookup = (distinct.withColumn("fingerprint", fingerprint_pandas_udf(engine.keys, scope)("value"))
+                  .join(vault, "fingerprint", "left")
+                  .select("value", F.col("masked_value").alias("replacement")))
+    else:
+        vault = engine.store.dataframe(spark, scope).alias("m")
+        joined = distinct.alias("d").join(vault, F.col("d.value") == F.col("m.masked_value"), "left")
+        decrypt = decrypt_pandas_udf(engine.keys, scope)
+        lookup = joined.select(F.col("d.value").alias("value"),
+                               decrypt(*[F.col("m." + f) for f in MAPPING_FIELDS]).alias("replacement"))
+    lookup = _persist(lookup)
+    size = lookup.count()
+    distinct.unpersist()
+    missing = lookup.where(F.col("replacement").isNull())
+    return lookup, size, missing
+
+
 def transform(engine, df, *, table, action, reason, columns=None, on_missing="error", context=None):
     from pyspark.sql import functions as F
     try:
@@ -43,44 +175,41 @@ def transform(engine, df, *, table, action, reason, columns=None, on_missing="er
         raise
     context = context or engine._begin(action, scopes, reason=reason, table=table, columns=chosen)
     try:
-        # Prevent accidental repeated transformation when package metadata is present.
         for column, scope in zip(chosen, scopes):
             tag = df.schema[column].metadata.get(TAG)
             if tag:
                 if action == "MASK" or tag.get("state") != "masked" or tag.get("scope") != scope.key():
                     raise ConfigurationError("Column state or mapping scope is incompatible")
-        if action == "MASK":
-            for column, scope in zip(chosen, scopes):
-                distinct = df.select(F.col(quoted(column)).alias("value")).where(F.col("value").isNotNull()).distinct()
-                for values in batches((r.value for r in distinct.toLocalIterator()), engine.batch_size):
-                    engine._resolve_many(values, scope, context["executor"])
         out = df
         unresolved = {}
+        checked = set()
         for column, scope in zip(chosen, scopes):
-            mappings = engine.store.dataframe(df.sparkSession, scope)
-            for key in ("fingerprint", "masked_value"):
-                if mappings.groupBy(key).count().where(F.col("count") > 1).limit(1).count():
-                    raise AmbiguousMappingError("Vault contains duplicate mapping keys")
+            if scope.key() not in checked:
+                mappings = engine.store.dataframe(df.sparkSession, scope)
+                for key in ("fingerprint", "masked_value"):
+                    if mappings.groupBy(key).count().where(F.col("count") > 1).limit(1).count():
+                        raise AmbiguousMappingError("Vault contains duplicate mapping keys")
+                checked.add(scope.key())
             if action == "MASK":
                 engine._key_check(scope)
-            left, right = out.alias("d"), mappings.alias("m")
-            source = F.col("d." + quoted(column))
-            match = fingerprint_udf(engine.keys, scope)(source) == F.col("m.fingerprint") if action == "MASK" else source == F.col("m.masked_value")
-            joined = left.join(right, match, "left")
-            missing = source.isNotNull() & F.col("m.fingerprint").isNull()
-            if on_missing == "error":
-                if joined.where(missing).limit(1).count():
+            lookup, size, missing = _lookup(engine, df, column, scope, action)
+            engine._track(lookup)
+            if action == "MASK":
+                if missing.limit(1).count():
+                    raise IntegrityError("Allocation did not cover every distinct value")
+                unresolved[column] = 0
+            elif on_missing == "error":
+                if missing.limit(1).count():
                     raise MissingMappingError("At least one non-null value has no mapping in the selected scope")
                 unresolved[column] = 0
             else:
-                unresolved[column] = joined.where(missing).count()
-            if action == "MASK":
-                replacement = F.col("m.masked_value")
-            else:
-                record = F.struct(*[F.col("m." + f).alias(f) for f in MAPPING_FIELDS])
-                replacement = decrypt_udf(engine.keys, scope)(record)
-                if on_missing == "keep_masked":
-                    replacement = F.when(missing, source).otherwise(replacement)
+                unresolved[column] = df.join(missing, F.col(quoted(column)) == missing.value, "left_semi").count()
+            right = F.broadcast(lookup) if size <= engine.broadcast_threshold else lookup
+            source = F.col("d." + quoted(column))
+            joined = out.alias("d").join(right.alias("m"), source == F.col("m.value"), "left")
+            replacement = F.col("m.replacement")
+            if action == "UNMASK" and on_missing == "keep_masked":
+                replacement = F.coalesce(replacement, source)
             metadata = dict(out.schema[column].metadata)
             metadata[TAG] = {"scope": scope.key(), "state": "masked" if action == "MASK" else ("partial" if unresolved[column] else "restored")}
             out = joined.select(*[replacement.alias(c, metadata=metadata) if c == column else F.col("d." + quoted(c)) for c in out.columns])
@@ -94,32 +223,34 @@ def transform(engine, df, *, table, action, reason, columns=None, on_missing="er
 
 def dry_run(engine, df, table):
     from pyspark.sql import functions as F
-    from pyspark.sql.types import BooleanType
     chosen, scopes = selection(engine, df, table)
     context = engine._begin("MASK", scopes, reason="Dry run", table=table, columns=chosen)
     try:
-        result = {"records_processed": df.count(), "columns": {}, "errors": 0, "estimates": False}
+        result = {"records_processed": df.count(), "columns": {}, "errors": 0, "estimates": False,
+                  "names_masked": 0, "emails_masked": 0, "phones_masked": 0, "addresses_masked": 0,
+                  "memberships_masked": 0}
+        definitions = engine.config.columns(table)
         for column, scope in zip(chosen, scopes):
             engine._key_check(scope)
             masker = engine.maskers[scope.domain]
-
-            def valid(value):
-                try:
-                    masker.validate(value)
-                    return True
-                except ConfigurationError:
-                    return False
-
-            source = df.select(F.col(quoted(column)).alias("value")).where(F.col("value").isNotNull())
-            distinct = source.distinct()
+            source = _persist(df.select(F.col(quoted(column)).alias("value")).where(F.col("value").isNotNull()))
+            distinct = _persist(source.distinct())
             existing = engine.store.dataframe(df.sparkSession, scope).select("fingerprint").distinct()
-            missing = distinct.withColumn("fingerprint", fingerprint_udf(engine.keys, scope)(F.col("value"))).join(existing, "fingerprint", "left_anti").count()
-            errors = source.where(~F.udf(valid, BooleanType())("value")).count()
-            result["columns"][column] = {"non_null_rows": source.count(), "distinct_values": distinct.count(),
+            missing = (distinct.withColumn("fingerprint", fingerprint_pandas_udf(engine.keys, scope)("value"))
+                       .join(existing, "fingerprint", "left_anti").count())
+            errors = source.where(~validate_pandas_udf(masker)("value")).count()
+            non_null = source.count()
+            result["columns"][column] = {"non_null_rows": non_null, "distinct_values": distinct.count(),
                                          "missing_mappings": missing, "invalid_rows": errors,
                                          "candidate_pool_capacity": masker.capacity,
                                          "capacity_note": "Per format/suffix for phones/memberships; existing collisions may reduce availability"}
             result["errors"] += errors
+            kind = definitions[column]["mask_type"]
+            bucket = "names_masked" if kind in NAME_TYPES else {"email": "emails_masked", "phone": "phones_masked",
+                                                                 "address": "addresses_masked", "membership": "memberships_masked"}[kind]
+            result[bucket] += non_null
+            source.unpersist()
+            distinct.unpersist()
         engine.audit.emit(**context, status="SUCCEEDED", records=result["records_processed"], errors=result["errors"])
         return result
     except Exception as error:
@@ -185,6 +316,8 @@ def _publish(engine, frame, target, manifest, context):
         except Exception:
             raise RecoveryRequiredError(f"Request {context['request_id']}: staging table {stage} requires operator cleanup") from None
         raise error
+    finally:
+        engine.release()
 
 
 def persist_masked(engine, source, target, table):

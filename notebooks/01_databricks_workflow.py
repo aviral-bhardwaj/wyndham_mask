@@ -71,6 +71,7 @@ source_df = spark.createDataFrame([
 source_df.write.format("delta").mode("errorifexists").saveAsTable(SOURCE)
 report = masker.dry_run(source_df, table="customer")
 assert report["records_processed"] == 3
+print({k: report[k] for k in ("records_processed", "names_masked", "emails_masked", "phones_masked", "errors")})
 mask_result = masker.mask_table(source_table=SOURCE, target_table=MASKED, table="customer")
 assert mask_result["records"] == 3
 
@@ -83,6 +84,7 @@ selected_df = unmasker.unmask_dataframe(
 expected = source_df.select("customer_id", "email", "phone")
 actual = selected_df.select("customer_id", "email", "phone")
 assert actual.exceptAll(expected).count() == expected.exceptAll(actual).count() == 0
+unmasker.release()  # drop the cached lookups once the DataFrame has been consumed
 
 # COMMAND ----------
 # Fresh engine; no in-memory mapping cache is required. This writes a new restricted
@@ -104,6 +106,14 @@ try:
     raise AssertionError("Unauthorized request unexpectedly succeeded")
 except PermissionError:
     pass
+
+# COMMAND ----------
+# MAGIC %md
+# MAGIC For large tables (tens of millions of rows) the same calls apply unchanged: allocation
+# MAGIC runs as distributed Spark joins over the distinct values of each column and the vault
+# MAGIC receives one append per column. Optionally call `spark.sparkContext.setCheckpointDir(...)`
+# MAGIC with a reliable location so allocation rounds use durable checkpoints on autoscaling
+# MAGIC clusters. See docs/VALIDATION.md for the measured 60M-row qualification.
 
 # COMMAND ----------
 # MAGIC %md

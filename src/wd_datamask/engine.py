@@ -16,15 +16,37 @@ def batches(values, size=1000):
 
 
 class Engine:
-    def __init__(self, *, config, store, keys, permissions, audit, spark=None, lookups=None, batch_size=1000):
+    def __init__(self, *, config, store, keys, permissions, audit, spark=None, lookups=None, batch_size=1000,
+                 broadcast_threshold=500_000):
         self.config = load_config(config)
         self.store, self.keys, self.permissions, self.audit = store, keys, permissions, audit
         self.spark = spark
         self.lookups = lookups or LookupManager()
         if not isinstance(batch_size, int) or not 1 <= batch_size <= 10000:
             raise ConfigurationError("Batch size must be between 1 and 10000")
+        if not isinstance(broadcast_threshold, int) or broadcast_threshold < 0:
+            raise ConfigurationError("Broadcast threshold must be a non-negative integer")
         self.batch_size = batch_size
+        # Lookups with at most this many distinct values are broadcast to every executor.
+        self.broadcast_threshold = broadcast_threshold
         self.maskers = {d: make_masker(spec, self.lookups) for d, spec in self.config.domains.items()}
+        self._tracked = []
+
+    def _track(self, frame):
+        """Remember a persisted lookup frame referenced by a returned lazy plan."""
+        self._tracked.append(frame)
+
+    def release(self):
+        """Unpersist cached lookup frames from earlier DataFrame operations.
+
+        Call it once the DataFrames returned by ``mask_dataframe``/``unmask_dataframe``
+        have been written or are no longer needed. Table operations call it themselves.
+        """
+        while self._tracked:
+            try:
+                self._tracked.pop().unpersist()
+            except Exception:
+                pass
 
     def _begin(self, action, scopes, *, reason, table=None, columns=None, destination=None):
         identity = self.permissions.identity()
@@ -96,10 +118,10 @@ class Engine:
             while pending:
                 candidates = {}
                 for original, attempt in pending.items():
-                    if attempt >= min(masker.capacity, 10000):
+                    if attempt >= masker.max_attempts:
                         raise MappingCapacityError("No free substitute within the pool/probe limit; expand the lookup pool")
                     seed = int(fingerprints[original], 16)
-                    candidates[original] = masker.candidate(original, seed + attempt)
+                    candidates[original] = masker.candidate(original, seed, attempt)
                 used = self.store.find(scope, "masked_value", list(set(candidates.values())))
                 for original, candidate in candidates.items():
                     if candidate == original or candidate in used or candidate in reserved:

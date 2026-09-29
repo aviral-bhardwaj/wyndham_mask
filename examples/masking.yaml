@@ -3,6 +3,9 @@ mapping_version: v1
 defaults:
   invalid_values: replace
   email_domain: example.com
+  # phone_pool: synthetic (default, ~6.3 billion well-formed NANP numbers) or
+  # fictitious (reserved 555-01XX range, 100 numbers per format; demos only)
+  phone_pool: synthetic
 tables:
   customer:
     columns:

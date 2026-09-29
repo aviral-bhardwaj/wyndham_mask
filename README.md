@@ -13,6 +13,7 @@ source .venv/bin/activate
 python -m pip install -e '.[dev]'
 python examples/local_demo.py
 python -m pytest -m 'not spark and not delta'
+python -m pytest                 # Spark tests too (Java 17 and local loopback networking)
 python -m build
 ```
 
@@ -97,11 +98,25 @@ the validation guide explicitly identifies implementation limits.
 - Distributed Spark joins; pure scalar and Pandas lookup UDFs for bounded snapshots.
 - Read-only dry runs and explicit parent/child relationship subsetting.
 
-This is an initial implementation, not a claim of production certification. Built-in
-lookup files are demo-sized: first/last names have 32 entries each and the default
-phone pool has 100 numbers per formatting pattern. They cannot support arbitrary
-high-cardinality source values. Expand and validate lookup pools for your workload.
-The 10M-row/100-table targets require benchmarking in your Databricks environment.
+Built-in lookup pools come from public US Census name data and generated street names:
+5,130 first names, 20,000 last names and 12,760 streets. Pool maskers are tiered, so
+after the plain entries are used up they continue with readable hyphenated compounds
+(`Anna-Marie`, `Smith-Parker`), giving each name domain hundreds of millions of
+distinct substitutes; emails use `first.last@domain` then `first.last<n>@domain`;
+phones keep the original separators and draw from ~6.3 billion well-formed synthetic
+NANP numbers (`phone_pool: fictitious` restricts them to the reserved 555-01XX range).
+Existing mappings stay authoritative when pools are expanded via `LookupManager(path)`.
+
+DataFrame masking and unmasking are fully distributed: workers only see the distinct
+values of one column at a time, new mappings are allocated by bounded rounds of Spark
+joins and appended to the vault once per column, and the rows are joined with a
+broadcast or shuffled lookup. The end-to-end volume qualification in
+`scripts/scale_test.py` masks and restores 60 million rows (all seven mask types, ~5
+million distinct customers) in one `mask_dataframe` call; see
+[validation](docs/VALIDATION.md) for the measured run. `ParquetRepository` provides the
+same distributed vault on a single machine without Delta jars for such qualification;
+use `DeltaRepository` on Databricks. Call `engine.release()` after the returned
+DataFrame has been written to drop cached lookups.
 
 The package cannot enforce security against arbitrary code running with vault and
 key access. Keep that access inside a trusted operator-controlled job or service.

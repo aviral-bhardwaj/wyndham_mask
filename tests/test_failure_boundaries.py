@@ -141,3 +141,30 @@ def test_invalid_unmask_scope_is_audited(setup):
     with pytest.raises(ConfigurationError):
         unmask.unmask_value("value", domain="not_configured", reason="Invalid domain")
     assert deps["audit"].events()[-1]["status"] == "REJECTED"
+
+
+def test_pandas_udf_bodies(setup):
+    """Exercise the Arrow UDF functions directly (worker-side code is invisible to coverage)."""
+    import pandas as pd
+    from dataclasses import asdict
+    from wd_datamask.spark.pandas_udfs import (fingerprint_pandas_udf, candidate_pandas_udf, validate_pandas_udf,
+                                              encrypt_pandas_udf, decrypt_pandas_udf)
+    from wd_datamask.storage.mapping_store import MAPPING_FIELDS
+    mask, _, deps, _ = setup
+    scope, keys = deps["config"].scope("email"), deps["keys"]
+    masker = mask.maskers["email"]
+    values = pd.Series(["a@example.org", None, "bad"])
+    fingerprints = fingerprint_pandas_udf(keys, scope).func(values)
+    assert fingerprints[1] is None and fingerprints[0] == keys.fingerprint(scope, "a@example.org")
+    candidates = candidate_pandas_udf(masker).func(values, fingerprints.fillna("0"), pd.Series([0, 0, 3]))
+    assert candidates[1] is None and candidates[0] == masker.candidate("a@example.org", int(fingerprints[0], 16), 0)
+    assert candidates[2].endswith("@example.com")
+    assert validate_pandas_udf(masker).func(values).tolist() == [True, True, True]  # policy: replace
+    strict = mask.maskers["membership"].__class__(invalid_values="error")
+    assert validate_pandas_udf(strict).func(pd.Series(["123456789A", "bad", None])).tolist() == [True, False, True]
+    encrypted = encrypt_pandas_udf(keys, scope).func(pd.Series(["a@example.org"]), pd.Series([candidates[0]]), pd.Series([fingerprints[0]]))
+    row = dict(scope=scope.key(), fingerprint=fingerprints[0], fingerprint_key_id=keys.fingerprint_key_id,
+               masked_value=candidates[0], encrypted_original=encrypted[0], encryption_key_id=keys.encryption_key_id,
+               created_at="now", created_by="test", batch_id="b")
+    columns = [pd.Series([row[f], None]) for f in MAPPING_FIELDS]
+    assert decrypt_pandas_udf(keys, scope).func(*columns).tolist() == ["a@example.org", None]
