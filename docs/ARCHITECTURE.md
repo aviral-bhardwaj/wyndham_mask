@@ -7,10 +7,10 @@ flowchart TD
     P --> A[Audit request and authorization]
     A --> M[MaskingEngine]
     A --> U[UnmaskingEngine]
-    M --> D[Distributed distinct values]
-    D --> B[Bounded allocation batches]
+    M --> D[Distinct values per column]
+    D --> B[Distributed probing rounds: candidate, collision, retry]
     B --> L[Exclusive allocation mutex]
-    L --> V[Delta mapping vault]
+    L --> V[Delta mapping vault: one append per column]
     K[Secrets-managed key ring] --> V
     V --> J[Distributed joins]
     M --> J
@@ -32,17 +32,36 @@ encrypted original and encryption key ID, UTC creation timestamp, execution iden
 and allocation batch ID. Nonce/tag are encoded in `encrypted_original`. String is the
 only supported sensitive-field type; unsupported types fail before processing.
 
-New values stream through bounded driver batches, with Spark performing distinct
-extraction and distributed mapping joins. The driver temporarily holds exact source
-strings for a batch. Large vaults remain distributed in the Delta backend. Allocation
-is deliberately serialized for correctness; high novel-value cardinality is a
-throughput constraint to benchmark. Source data must be deterministic during a
-DataFrame call. Table APIs pin the input Delta version.
-Spark's `toLocalIterator` can buffer the largest partition before Python consumes
-individual batches. Size distinct-value partitions appropriately; the batch size
-alone is not a hard cap on all driver/JVM memory.
+DataFrame masking is fully distributed (`spark/dataframe_masker.py`). For each
+configured column the engine takes the distinct non-null values, fingerprints them with
+an Arrow (pandas) UDF, anti-joins the vault to find unmapped values and then runs a
+bounded probing loop: every round proposes one deterministic candidate per pending value
+(`masker.candidate(original, fingerprint_seed, attempt)`), drops candidates already
+present in the vault or equal to the original, resolves in-round collisions with a
+window `row_number`, and carries the losers into the next round with `attempt + 1`.
+Round results are checkpointed so the plan does not nest; typically two to five rounds
+are needed. Survivors are encrypted on executors and appended to the vault in a single
+write per column, all under the allocation mutex, so a capacity error leaves the vault
+untouched. The source rows are then joined once per column with a persisted
+`value -> substitute` lookup (broadcast when it has at most
+`Engine.broadcast_threshold` distinct values). Unmasking mirrors this with a join on the
+substitute and executor-side authenticated decryption of the distinct matches. Workers
+therefore process distinct values rather than rows, and the driver never holds source
+strings for DataFrame operations. Scalar `mask_value`/`unmask_value` calls keep a
+small driver-side allocator that uses the same candidate contract.
 
-The built-in lookups produce realistic names/addresses and synthetic email addresses.
+Lookups stay cached until `engine.release()` (called automatically by the table APIs)
+so that the lazy DataFrame returned to the caller does not recompute fingerprints.
+Allocation is serialized per vault for correctness; the loop's cost is proportional
+to the number of *new* distinct values, not to the row count. Source data must be
+deterministic during a DataFrame call. Table APIs pin the input Delta version.
+
+The built-in lookups (US Census first/last names, generated street names) produce
+realistic names/addresses and synthetic email addresses. Pool maskers are tiered: plain
+entries first (`Michael`), then hyphenated pairs (`Anna-Marie`, `Smith-Parker`) and
+triples, which extends capacity to hundreds of millions of readable values. Phone
+substitutes preserve the original separators and, by default, use well-formed synthetic
+NANP numbers; a reserved 555-01XX pool is available for demos.
 Pool exhaustion raises an error rather than merging source identities. Full names
 use an independent reversible mapping; they are not reconstructed from first/last
 name mappings, because that could lose punctuation or collapse distinct originals.

@@ -90,8 +90,10 @@ ship plaintext forward mapping inputs to workers; use them only on trusted compu
 SQLite uses a transaction plus enforced unique indexes. Delta uses a single
 pre-provisioned global mutex row with Serializable isolation. A conditional Delta
 UPDATE changes a null owner to a unique allocation ID. All library mutations require
-ownership, and batches resolve collisions before appending records. No executor UDF
-writes mappings. The mutex serializes allocations across table jobs; reads and Spark
+ownership, and each column's probing rounds resolve collisions before a single append.
+Executor UDFs only fingerprint, propose candidates, encrypt and decrypt; they never
+write mappings. Allocation intermediates are checkpointed (executor storage, or the
+directory given to `SparkContext.setCheckpointDir`) and unpersisted afterwards. The mutex serializes allocations across table jobs; reads and Spark
 transforms can execute concurrently. Contention returns `AllocationBusyError` for a
 bounded job-level retry with backoff. Do not bypass the repository with direct writes.
 

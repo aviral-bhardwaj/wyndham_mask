@@ -1,0 +1,122 @@
+{
+  "rows": 60000000,
+  "customers": 5000000,
+  "backend": "parquet",
+  "spark": "3.5.9",
+  "cores": 2,
+  "driver_memory": "4g",
+  "timings": {
+    "generate_source": 112.2,
+    "source_stats": 1217.8,
+    "mask_dataframe_and_write": 1778.7,
+    "verify_masked": 225.5,
+    "unmask_dataframe_and_verify": 638.4,
+    "repeat_mask_is_idempotent": 332.2
+  },
+  "broadcast_threshold": 1000000,
+  "source": {
+    "rows": 60000000,
+    "customers": 5000000,
+    "distinct_first_name": 25000,
+    "distinct_last_name": 120000,
+    "distinct_full_name": 600000,
+    "distinct_email": 5000001,
+    "distinct_phone": 20001,
+    "distinct_address_line_1": 3999996,
+    "distinct_membership_no": 5000001,
+    "nulls_first_name": 594060,
+    "nulls_last_name": 594060,
+    "nulls_full_name": 594060,
+    "nulls_email": 594060,
+    "nulls_phone": 594060,
+    "nulls_address_line_1": 594060,
+    "nulls_membership_no": 594060
+  },
+  "masked": {
+    "rows": 60000000,
+    "distinct_first_name": 25000,
+    "distinct_last_name": 120000,
+    "distinct_full_name": 600000,
+    "distinct_email": 5000001,
+    "distinct_phone": 20001,
+    "distinct_address_line_1": 3999996,
+    "distinct_membership_no": 5000001,
+    "nulls_first_name": 594060,
+    "nulls_last_name": 594060,
+    "nulls_full_name": 594060,
+    "nulls_email": 594060,
+    "nulls_phone": 594060,
+    "nulls_address_line_1": 594060,
+    "nulls_membership_no": 594060
+  },
+  "checks_masked": {
+    "row_count_preserved": true,
+    "columns_preserved": true,
+    "null_counts_preserved": true,
+    "distinct_counts_preserved": true,
+    "values_changed_nulls_kept": true,
+    "phone_shape_preserved": true,
+    "one_masked_value_per_customer": true,
+    "email_domain_applied": true,
+    "membership_format": true,
+    "names_are_readable": true
+  },
+  "masked_examples": [
+    {
+      "first_name": "Tia-Nelda",
+      "last_name": "Siggers-Ebbert",
+      "full_name": "Maryellen Harriman",
+      "email": "jeri.preciado118@example.com",
+      "phone": "(835) 883-1376",
+      "address_line_1": "4495 Chambers Street",
+      "membership_no": "355998568E"
+    },
+    {
+      "first_name": "Tia-Nelda",
+      "last_name": "Siggers-Ebbert",
+      "full_name": "Maryellen Harriman",
+      "email": "jeri.preciado118@example.com",
+      "phone": "(835) 883-1376",
+      "address_line_1": "4495 Chambers Street",
+      "membership_no": "355998568E"
+    },
+    {
+      "first_name": "Tia-Nelda",
+      "last_name": "Siggers-Ebbert",
+      "full_name": "Maryellen Harriman",
+      "email": "jeri.preciado118@example.com",
+      "phone": "(835) 883-1376",
+      "address_line_1": "4495 Chambers Street",
+      "membership_no": "355998568E"
+    },
+    {
+      "first_name": "Tia-Nelda",
+      "last_name": "Siggers-Ebbert",
+      "full_name": "Maryellen Harriman",
+      "email": "jeri.preciado118@example.com",
+      "phone": "(835) 883-1376",
+      "address_line_1": "4495 Chambers Street",
+      "membership_no": "355998568E"
+    },
+    {
+      "first_name": "Tia-Nelda",
+      "last_name": "Siggers-Ebbert",
+      "full_name": "Maryellen Harriman",
+      "email": "jeri.preciado118@example.com",
+      "phone": "(835) 883-1376",
+      "address_line_1": "4495 Chambers Street",
+      "membership_no": "355998568E"
+    }
+  ],
+  "checks_restored": {
+    "row_count": true,
+    "content_hash": true,
+    "source_hash": 744521995774426549,
+    "restored_hash": 744521995774426549
+  },
+  "repeat_mask_consistent": true,
+  "vault_rows": 14764999,
+  "vault_duplicate_keys": 0,
+  "audit_events": 9,
+  "passed": true
+}

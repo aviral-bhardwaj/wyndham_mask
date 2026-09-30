@@ -43,12 +43,20 @@ def test_persistence_and_no_plaintext(setup, tmp_path):
 def test_finite_pool_exhaustion_is_atomic(setup):
     mask, _, deps, _ = setup
     from wd_datamask.maskers.base import NameMasker
-    mask.maskers["first_name"] = NameMasker(["Alice", "Bob"])
+    mask.maskers["first_name"] = NameMasker(["Alice", "Bob"], compound=False)
     scope = deps["config"].scope("first_name")
     with pytest.raises(MappingCapacityError):
         mask._resolve_many(["one", "two", "three"], scope, "test")
     assert deps["store"].all_for_scope(scope) == []
     assert len(set(mask._resolve_many(["one", "two"], scope, "test").values())) == 2
+    # Compound tiers extend a tiny pool: 2 plain + 2 pairs + 2 triples.
+    mask.maskers["first_name"] = NameMasker(["Alice", "Bob"])
+    values = mask._resolve_many(["three", "four", "five"], scope, "test")
+    assert len(set(values.values())) == 3
+    assert all(v.split("-")[0] in {"Alice", "Bob"} for v in values.values())
+    with pytest.raises(MappingCapacityError):  # capacity 6, seven requested in total
+        mask._resolve_many(["six", "seven", "eight"], scope, "test")
+    assert len(deps["store"].all_for_scope(scope)) == 5
 
 
 def test_concurrent_connections_unique_allocations(setup, tmp_path):

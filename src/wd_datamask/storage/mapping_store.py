@@ -61,6 +61,13 @@ class MappingStore:
         except sqlite3.IntegrityError:
             raise IntegrityError("Mapping uniqueness violation") from None
 
+    def insert_dataframe(self, frame):
+        # Bounded local backend: stream the distributed batch through the driver.
+        from itertools import islice
+        rows = (Mapping(**{f: getattr(r, f) for f in MAPPING_FIELDS}) for r in frame.select(*MAPPING_FIELDS).toLocalIterator())
+        while batch := list(islice(rows, 1000)):
+            self.insert(batch)
+
     def replace_encryption(self, records):
         self._db.executemany("UPDATE mappings SET encrypted_original=?, encryption_key_id=? WHERE scope=? AND fingerprint=?", [(r.encrypted_original, r.encryption_key_id, r.scope, r.fingerprint) for r in records])
 

@@ -22,7 +22,7 @@ class Config:
         self.namespace = raw["namespace"]
         self.version = raw["mapping_version"]
         self.defaults = raw.get("defaults", {})
-        if not isinstance(self.defaults, dict) or set(self.defaults) - {"invalid_values", "email_domain"}:
+        if not isinstance(self.defaults, dict) or set(self.defaults) - {"invalid_values", "email_domain", "phone_pool"}:
             raise ConfigurationError("Unsupported defaults")
         self.tables = raw.get("tables", {})
         if not isinstance(self.tables, dict) or not self.tables:
@@ -34,13 +34,15 @@ class Config:
             for column, definition in body["columns"].items():
                 if not all(isinstance(x, str) and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", x) for x in (table, column)):
                     raise ConfigurationError("Invalid table or column identifier")
-                if not isinstance(definition, dict) or set(definition) - {"mask_type", "domain", "invalid_values", "email_domain", "mode"}:
+                if not isinstance(definition, dict) or set(definition) - {"mask_type", "domain", "invalid_values", "email_domain", "phone_pool", "mode"}:
                     raise ConfigurationError("Unsupported column configuration")
                 spec = {**self.defaults, **definition}
                 if not isinstance(spec.get("mask_type"), str) or spec["mask_type"] not in TYPES or not isinstance(spec.get("domain"), str) or not spec["domain"]:
                     raise ConfigurationError("Mask type and domain are required")
                 if spec.get("invalid_values", "error") not in {"error", "replace"}:
                     raise ConfigurationError("Invalid source-value policy")
+                if spec.get("phone_pool", "synthetic") not in {"synthetic", "fictitious"}:
+                    raise ConfigurationError("Unsupported phone pool")
                 if spec.get("mode", "independent_mapping") != "independent_mapping":
                     raise ConfigurationError("Only independent reversible full-name mappings are supported")
                 prior = self.domains.setdefault(spec["domain"], spec)
