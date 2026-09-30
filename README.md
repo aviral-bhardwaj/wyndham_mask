@@ -42,7 +42,9 @@ from wd_datamask import MaskingEngine, UnmaskingEngine
 
 Initialize `masker` and `unmasker` with a validated configuration, vault, key ring,
 trusted identity provider, operator-installed permission policy, and audit sink.
-See the [complete Databricks notebook](notebooks/01_databricks_workflow.py) for setup.
+See the [complete Databricks notebook](notebooks/01_databricks_workflow.py) for setup, and
+[notebooks/02_faker_end_to_end.py](notebooks/02_faker_end_to_end.py) for a runnable walkthrough of every
+function on 12,000 Faker-generated customers and 30,000 bookings (`pip install faker`; also runs locally).
 
 ```python
 masked = masker.mask_value("john.smith@example.org", domain="customer_email")
