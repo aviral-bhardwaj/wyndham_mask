@@ -182,6 +182,12 @@ class ParquetRepository(DeltaRepository):
         if self._owner is None:
             raise IntegrityError("Mapping mutations require an allocation lock")
 
+    def all_for_scope(self, scope):
+        # Parquet has no snapshot isolation: take a checkpointed copy so a concurrent
+        # rewrite by replace_encryption cannot pull files from under the iterator.
+        snapshot = self.dataframe(self.spark, scope).localCheckpoint(eager=True)
+        return (Mapping(**r.asDict()) for r in snapshot.toLocalIterator())
+
     def replace_encryption(self, records):
         from pyspark.sql import functions as F
         self._require_lock()
@@ -198,3 +204,4 @@ class ParquetRepository(DeltaRepository):
         merged.write.format(self.format).mode("overwrite").saveAsTable(staged)
         self.spark.table(staged).write.format(self.format).mode("overwrite").saveAsTable(self.table)
         self.spark.sql(f"DROP TABLE IF EXISTS {staged}")
+        self.spark.catalog.refreshTable(self.table)

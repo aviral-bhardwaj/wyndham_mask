@@ -125,6 +125,17 @@ def test_parquet_lock_and_rotation(spark, parquet_setup, tmp_path):
     only_new = KeyRing({"e2": keys.encryption_keys["e2"]}, old.fingerprint_keys, "e2", "f1")
     assert UnmaskingEngine(**{**deps, "keys": only_new}).unmask_value(masked, domain="email", reason="After rotation") == "rotate@example.org"
     assert spark.table(f"{name}.vault").count() == 1
+    # Multi-file, multi-batch rotation: the streamed read must not see the rewritten files.
+    engine = MaskingEngine(**{**narrow(deps, "email"), "keys": only_new})
+    frame = spark.createDataFrame([(f"user{i}@example.org",) for i in range(2500)], "email STRING").repartition(4)
+    masked_frame = engine.mask_dataframe(frame, table="customer")
+    masked_frame.write.mode("overwrite").parquet(f"/tmp/{name}_rotation")
+    engine.release()
+    newest = KeyRing({**only_new.encryption_keys, "e3": os.urandom(32)}, old.fingerprint_keys, "e3", "f1")
+    assert MaskingEngine(**{**deps, "keys": newest}, batch_size=700).rotate_encryption("email", reason="Batched rotation") == 2501
+    restored = UnmaskingEngine(**{**narrow(deps, "email"), "keys": KeyRing({"e3": newest.encryption_keys["e3"]}, old.fingerprint_keys, "e3", "f1")}) \
+        .unmask_dataframe(spark.read.parquet(f"/tmp/{name}_rotation"), table="customer", reason="After batched rotation")
+    assert restored.exceptAll(frame).count() == 0 and frame.exceptAll(restored).count() == 0
     with pytest.raises(ValueError):
         ParquetRepository(spark, "bad name", tmp_path)
 
