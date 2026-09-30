@@ -65,8 +65,11 @@ def _materialize(frame):
     used when ``spark.sparkContext.setCheckpointDir`` was called, otherwise a local
     checkpoint (executor storage; the round is retried if an executor is lost).
     """
-    if frame.sparkSession.sparkContext.getCheckpointDir() is not None:
-        return frame.checkpoint(eager=True)
+    try:
+        if frame.sparkSession.sparkContext.getCheckpointDir() is not None:
+            return frame.checkpoint(eager=True)
+    except Exception:
+        pass  # sparkContext unavailable on Spark Connect; fall back to local checkpoint
     return frame.localCheckpoint(eager=True)
 
 
@@ -298,7 +301,7 @@ def _publish(engine, frame, target, manifest, context):
     stage = ".".join(stage)
     published = False
     try:
-        frame.write.format("delta").mode("errorifexists").saveAsTable(stage)
+        frame.write.format("delta").mode("error").saveAsTable(stage)
         rows = spark.table(stage).count()
         _set_manifest(spark, stage, manifest)
         engine.audit.emit(**context, status="PREPARED", records=rows, staging_table=stage)
@@ -345,7 +348,7 @@ def persist_unmasked(engine, source, target, table, columns, reason, write_mode)
     if spark is None:
         raise ConfigurationError("A Spark session is required")
     identifier(source), identifier(target)
-    if source == target or write_mode != "errorifexists":
+    if source == target or write_mode not in ("error", "errorifexists"):
         raise ConfigurationError("Restoration requires a new destination; overwrite and append are disabled")
     manifest, config = _read_manifest(spark, source)
     if manifest["logical_table"] != table or config.namespace != engine.config.namespace:

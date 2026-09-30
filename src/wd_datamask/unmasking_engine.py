@@ -30,6 +30,6 @@ class UnmaskingEngine(Engine):
                          action="UNMASK", on_missing=on_missing)
 
     def unmask_table(self, *, source_table, target_table, table, columns=None, reason,
-                     write_mode="errorifexists"):
+                     write_mode="error"):
         from .spark.dataframe_masker import persist_unmasked
         return persist_unmasked(self, source_table, target_table, table, columns, reason, write_mode)
